@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Learning Queue</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    background: #0f0f0f;
+    color: #f0f0f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 24px;
+    border-bottom: 1px solid #222;
+    flex-shrink: 0;
+  }
+  .controls h1 { font-size: 0.9rem; font-weight: 600; color: #888; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 8px; }
+  button {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.3; cursor: default; }
+  .btn-step  { background: #1865f2; color: white; }
+  .btn-reset { background: #2a2a2a; color: #ccc; }
+  .type-toggle { display: flex; border: 1px solid #333; border-radius: 6px; overflow: hidden; }
+  .type-toggle button { border-radius: 0; background: transparent; color: #666; padding: 6px 14px; font-size: 0.8rem; }
+  .type-toggle button.active { background: #333; color: #f0f0f0; }
+  .proposal-toggle { display: flex; border: 1px solid #2a1f0f; border-radius: 6px; overflow: hidden; }
+  .proposal-toggle button { border-radius: 0; background: transparent; color: #555; padding: 6px 14px; font-size: 0.8rem; }
+  .proposal-toggle button.active { background: #2a1a00; color: #f0a050; }
+  .status-text { margin-left: auto; font-size: 0.8rem; color: #555; }
+
+  /* backlog queue color + overdue content nodes */
+  .backlog  { background: #2a0a0a; color: #f87171; }
+  .overdue  { background: #2a0a0a; color: #f87171; }
+
+  .main {
+    flex: 1;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    padding: 24px 24px 0;
+    gap: 20px;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    border-top: 1px solid #1e1e1e;
+    padding: 10px 0 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    align-items: center;
+  }
+  .legend-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .legend-divider {
+    width: 1px;
+    height: 16px;
+    background: #222;
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    color: #555;
+    white-space: nowrap;
+  }
+  .legend-swatch {
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+  .legend-swatch.ia      { background: #1a2e5a; color: #7baaf7; }
+  .legend-swatch.map     { background: #2a1a4a; color: #b48af7; }
+  .legend-swatch.content { background: #2e1f0a; color: #f0a050; }
+  .legend-swatch.umg     { background: #1a3a2a; color: #5ecf8d; }
+  .legend-swatch.gap     { background: #1c1200; color: #fbbf24; border: 1.5px dashed #a16207; font-style: italic; }
+  .legend-bracket {
+    display: flex;
+    gap: 3px;
+    padding: 2px 5px;
+    border-radius: 5px;
+    border: 1.5px solid rgba(123,170,247,0.35);
+    background: rgba(26,46,90,0.3);
+  }
+  .legend-bracket span {
+    background: #1a2e5a;
+    color: #7baaf7;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.65rem;
+    font-weight: 700;
+  }
+  .legend-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-cursor { color: #1865f2; font-size: 0.75rem; }
+
+  /* ── Mission ── */
+  .mission-area {
+    border-bottom: 1px solid #222;
+    padding-bottom: 18px;
+  }
+  .section-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #444;
+    margin-bottom: 10px;
+  }
+  .mission-nodes {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 36px;
+    align-items: center;
+  }
+  .mission-node {
+    padding: 5px 8px 5px 11px;
+    border-radius: 5px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .mission-node.is-new { animation: pop-in 0.25s ease; }
+  .mission-node.done {
+    opacity: 0.3;
+    text-decoration: line-through;
+  }
+  .item-actions {
+    display: flex;
+    gap: 3px;
+    margin-left: 2px;
+  }
+  .item-actions button {
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    line-height: 1.4;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+  .item-actions button:hover { opacity: 1; }
+  .btn-complete { background: #14532d; color: #5ecf8d; }
+  .btn-return   { background: #1e1a2e; color: #b48af7; }
+  .mission-node.is-gap {
+    border: 2px dashed #a16207;
+    background: #1c1200;
+    color: #fbbf24;
+    font-style: italic;
+  }
+  @keyframes pop-in {
+    0%   { transform: scale(0.5) translateY(6px); opacity: 0; }
+    100% { transform: scale(1)   translateY(0);   opacity: 1; }
+  }
+  .mission-empty { color: #333; font-size: 0.85rem; }
+  .done-banner { display: none; font-size: 0.78rem; color: #5ecf8d; font-weight: 600; margin-top: 8px; }
+  .done-banner.visible { display: block; }
+
+  /* ── Queues ── */
+  .queues { display: flex; flex-direction: column; gap: 0; overflow-y: auto; }
+
+  .phase-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #2a2a2a;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    padding-left: 118px;
+  }
+  .phase-label:first-child { margin-top: 0; }
+  .phase-label.active-phase { color: #1865f2; }
+
+  .queue-row { display: flex; align-items: center; gap: 14px; padding: 3px 0; }
+  .queue-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #444;
+    width: 100px;
+    flex-shrink: 0;
+    text-align: right;
+    transition: color 0.15s;
+  }
+  .queue-label.active { color: #f0f0f0; }
+
+  .cursor-arrow {
+    font-size: 0.9rem;
+    color: #1865f2;
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .cursor-arrow.visible { opacity: 1; }
+
+  .nodes { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  .node {
+    padding: 5px 11px;
+    border-radius: 5px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .node.front { border-color: currentColor; }
+  .node.popping { animation: pop-out 0.35s ease forwards; }
+  @keyframes pop-out {
+    0%   { transform: scale(1);    opacity: 1; }
+    40%  { transform: scale(1.2);  opacity: 1; }
+    100% { transform: scale(0);    opacity: 0; }
+  }
+
+  .ia      { background: #1a2e5a; color: #7baaf7; }
+  .map     { background: #2a1a4a; color: #b48af7; }
+  .content { background: #2e1f0a; color: #f0a050; }
+  .umg     { background: #1a3a2a; color: #5ecf8d; }
+
+  .due-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .due-dot.in-window  { background: #5ecf8d; }
+  .due-dot.out-window { background: #3a3a3a; }
+
+  /* ── Phase 3 gap finder ── */
+  .gap-finder-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 3px 0;
+  }
+  .gap-pool {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .gap-pill {
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 2px dashed #a16207;
+    background: #1c1200;
+    color: #fbbf24;
+    opacity: 0.4;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .gap-pill.matched {
+    opacity: 1;
+    box-shadow: 0 0 0 2px #fbbf24;
+  }
+  .gap-pill.used { opacity: 0.15; }
+
+  /* ── UMG group brackets ── */
+  .umg-group {
+    display: flex;
+    gap: 4px;
+    padding: 3px 5px;
+    border-radius: 6px;
+    border: 1.5px solid transparent;
+  }
+  .umg-group.ia  { border-color: rgba(123,170,247,0.3);  background: rgba(26,46,90,0.25); }
+  .umg-group.map { border-color: rgba(180,138,247,0.3);  background: rgba(42,26,74,0.25); }
+  .umg-group.umg { border-color: rgba(94,207,141,0.3);   background: rgba(26,58,42,0.25); }
+
+  /* scanning highlight on mission nodes */
+  .mission-node.scanning {
+    box-shadow: 0 0 0 2px #1865f2;
+    animation: none;
+  }
+  .mission-node.gap-inserted {
+    animation: gap-flash 0.4s ease;
+  }
+  @keyframes gap-flash {
+    0%   { transform: scale(0.6) translateY(-6px); opacity: 0; }
+    60%  { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <h1>Queue Sim</h1>
+  <button class="btn-step" id="btn-step" onclick="step()">Step ▶</button>
+  <button class="btn-reset" onclick="reset()">Reset</button>
+  <div class="type-toggle">
+    <button class="active" id="t-daily" onclick="setType('daily')">Daily</button>
+    <button id="t-weekly" onclick="setType('weekly')">Weekly</button>
+  </div>
+  <div class="proposal-toggle">
+    <button class="active" id="p-1" onclick="setProposal(1)">Proposal 1</button>
+    <button id="p-2" onclick="setProposal(2)">Proposal 2</button>
+  </div>
+  <span class="status-text" id="status"></span>
+</div>
+
+<div class="main">
+  <div class="mission-area">
+    <div class="section-label">Mission</div>
+    <div class="mission-nodes" id="mission-nodes"><span class="mission-empty">empty</span></div>
+    <div class="done-banner" id="done-banner">✓ Mission complete</div>
+  </div>
+  <div class="queues" id="queues"></div>
+
+  <div class="legend">
+    <!-- Source colors -->
+    <div class="legend-group">
+      <div class="legend-item"><span class="legend-swatch ia">A1</span> IA strand</div>
+      <div class="legend-item"><span class="legend-swatch map">M1</span> MAP strand</div>
+      <div class="legend-item"><span class="legend-swatch content">CA1</span> Assignment</div>
+      <div class="legend-item"><span class="legend-swatch umg">T1a</span> Teacher UMG</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#2a0a0a;color:#f87171;">CA1</span> Overdue backlog <em style="color:#333;font-size:0.65rem;">(P2)</em></div>
+    </div>
+
+    <div class="legend-divider"></div>
+
+    <!-- UMG bracket -->
+    <div class="legend-group">
+      <div class="legend-item">
+        <div class="legend-bracket"><span>A1</span><span>A2</span><span>A3</span></div>
+        UMG boundary
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch ia">A1</span>
+        single exercise
+      </div>
+      <div class="legend-item">
+        <span class="legend-swatch gap">r·A1</span>
+        readiness exercise
+      </div>
+    </div>
+
+    <div class="legend-divider"></div>
+
+    <!-- Due dots -->
+    <div class="legend-group">
+      <div class="legend-item"><span class="legend-dot" style="background:#5ecf8d"></span> due this window</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#3a3a3a"></span> due later</div>
+    </div>
+
+    <div class="legend-divider"></div>
+
+    <!-- Cursor + actions -->
+    <div class="legend-group">
+      <div class="legend-item"><span class="legend-cursor">▶</span> round-robin cursor</div>
+      <div class="legend-item" style="gap:4px;">
+        <button style="padding:1px 5px;border-radius:3px;font-size:0.68rem;font-weight:700;border:none;background:#14532d;color:#5ecf8d;cursor:default;">✓</button>
+        mark complete
+      </div>
+      <div class="legend-item" style="gap:4px;">
+        <button style="padding:1px 5px;border-radius:3px;font-size:0.68rem;font-weight:700;border:none;background:#1e1a2e;color:#b48af7;cursor:default;">↩</button>
+        return to queue
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Definitions ───────────────────────────────────────────────────────────────
+
+const ASSIGNMENT_DEF = {
+  id: 'content', label: 'Assignments', type: 'content', isContent: true,
+  nodes: [
+    { id: 'CA1', due: 'overdue'   },
+    { id: 'CA2', due: 'overdue'   },
+    { id: 'CA3', due: 'overdue'   },
+    { id: 'CA4', due: 'today'    },
+    { id: 'CA5', due: 'tomorrow' },
+    { id: 'CA6', due: 'future'   },
+    { id: 'CA7', due: 'future'   },
+    { id: 'CA8', due: 'future'    },
+    { id: 'CA9', due: 'future'    },
+    { id: 'CA10', due: 'future'   },
+  ]
+};
+
+const RR_DEFS = [
+  // Each IA/MAP strand is a single UMG — one bracket around all nodes
+  { id: 'ia1',  label: 'IA Strand 1',  type: 'ia',  group: 'IA',  singleUmg: true,
+    nodes: ['A1','A2','A3','A4','A5','A6','A7','A8','A9','A10'] },
+  { id: 'ia2',  label: 'IA Strand 2',  type: 'ia',  group: 'IA',  singleUmg: true,
+    nodes: ['B1','B2','B3','B4','B5','B6','B7','B8','B9','B10'] },
+  { id: 'ia3',  label: 'IA Strand 3',  type: 'ia',  group: 'IA',  singleUmg: true,
+    nodes: ['C1','C2','C3','C4','C5','C6','C7','C8','C9','C10'] },
+  { id: 'map1', label: 'MAP Strand 1', type: 'map', group: 'MAP', singleUmg: true,
+    nodes: ['M1','M2','M3','M4','M5','M6','M7','M8','M9','M10'] },
+  { id: 'map2', label: 'MAP Strand 2', type: 'map', group: 'MAP', singleUmg: true,
+    nodes: ['N1','N2','N3','N4','N5','N6','N7','N8','N9','N10'] },
+  { id: 'map3', label: 'MAP Strand 3', type: 'map', group: 'MAP', singleUmg: true,
+    nodes: ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10'] },
+  { id: 'map4', label: 'MAP Strand 4', type: 'map', group: 'MAP', singleUmg: true,
+    nodes: ['Q1','Q2','Q3','Q4','Q5','Q6','Q7','Q8','Q9','Q10'] },
+  // Teacher queue: a sequence of UMGs lined up by due date, each with 5 nodes
+  { id: 'umg', label: 'Teacher UMGs', type: 'umg', group: 'Teacher', isTeacher: true,
+    nodes: [], // derived — kept flat for step logic
+    umgs: [
+      { id: 'TU1', due: 'overdue',   nodes: ['T1a','T1b','T1c','T1d','T1e'] },
+      { id: 'TU2', due: 'this_week', nodes: ['T2a','T2b','T2c','T2d','T2e'] },
+      { id: 'TU3', due: 'next_week', nodes: ['T3a','T3b','T3c','T3d','T3e'] },
+    ]
+  },
+];
+
+// Gap map: node label → gap label shown before it in the mission
+const GAP_MAP = {
+  'A1': 'gap·A1', 'B1': 'gap·B1', 'M1': 'gap·M1', 'T1': 'gap·T1',
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let assignmentQ, rrQueues, cursor, mission, missionType, proposal, phase, rrPassCount, rrStartCursor;
+let gapScanIndex, matchedGap;
+// proposal: 1 = standard burst (overdue included), 2 = overdue → backlog round-robin
+// phase: 'assignments' | 'roundrobin' | 'gaps' | 'done'
+
+function init() {
+  assignmentQ = { ...ASSIGNMENT_DEF, nodes: ASSIGNMENT_DEF.nodes.map(n => ({ ...n })) };
+  const baseQueues = RR_DEFS.map(q => ({
+    ...q,
+    nodes: [...q.nodes],
+    umgs: q.umgs ? q.umgs.map(u => ({ ...u, nodes: [...u.nodes] })) : undefined,
+  }));
+  if (proposal === 2) {
+    // Pre-populate backlog with overdue assignments; remove them from the assignment queue
+    const overdueItems = assignmentQ.nodes.filter(n => n.due === 'overdue');
+    assignmentQ.nodes   = assignmentQ.nodes.filter(n => n.due !== 'overdue');
+    rrQueues = [
+      { id: 'backlog', label: 'Overdue Backlog', type: 'backlog', group: 'Backlog', isBacklog: true,
+        nodes: overdueItems.map(n => n.id) },
+      ...baseQueues,
+    ];
+  } else {
+    rrQueues = baseQueues;
+  }
+  cursor         = 0;
+  mission        = [];
+  phase          = 'assignments';
+  rrPassCount    = 0;
+  rrStartCursor  = 0;
+  gapScanIndex   = -1;
+  matchedGap     = null;
+  missionType = document.getElementById('t-daily').classList.contains('active') ? 'daily' : 'weekly';
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('done-banner').classList.remove('visible');
+  render();
+}
+
+function target() { return missionType === 'daily' ? 3 : 10; }
+
+function inWindow(due) {
+  if (missionType === 'daily') return ['overdue','today','tomorrow'].includes(due);
+  return ['overdue','today','tomorrow','this_week','next_week'].includes(due);
+}
+
+// Proposal 2: burst window excludes overdue (those go to backlog instead)
+function inBurstWindow(due) {
+  if (proposal === 2) {
+    if (missionType === 'daily') return ['today','tomorrow'].includes(due);
+    return ['today','tomorrow','this_week','next_week'].includes(due);
+  }
+  return inWindow(due);
+}
+
+// ── Step ──────────────────────────────────────────────────────────────────────
+
+function step() {
+  if (phase === 'done') return;
+
+  if (phase === 'assignments') {
+    const burst   = assignmentQ.nodes.filter(n => inBurstWindow(n.due));
+    const overdue = []; // P2 overdue items are pre-loaded into backlog at init, not handled here
+    const toAnimate = [...burst, ...overdue];
+    if (toAnimate.length > 0) {
+      let count = 0;
+      toAnimate.forEach(n => {
+        const el = document.querySelector(`[data-queue="content"] [data-node="${n.id}"]`);
+        const finish = () => { count++; if (count === toAnimate.length) finishAssignmentBurst(burst, overdue); };
+        if (el) { el.classList.add('popping'); el.addEventListener('animationend', finish, { once: true }); }
+        else finish();
+      });
+    } else {
+      phase = 'roundrobin';
+      render();
+    }
+    return;
+  }
+
+  // Round-robin
+  const q = rrQueues[cursor];
+  const nextCursor = (cursor + 1) % rrQueues.length;
+  const completesPass = nextCursor === rrStartCursor;
+
+  const advance = () => {
+    cursor = nextCursor;
+    if (completesPass) rrPassCount++;
+    render();
+    checkTermination();
+  };
+
+  // Resolve front node (teacher queue is driven by umgs[], others by nodes[])
+  const frontNode = q.isTeacher
+    ? (q.umgs.length > 0 && q.umgs[0].nodes.length > 0 ? q.umgs[0].nodes[0] : null)
+    : (q.nodes.length > 0 ? q.nodes[0] : null);
+
+  if (frontNode) {
+    const el = document.querySelector(`[data-queue="${q.id}"] [data-node="${frontNode}"]`);
+    const doIt = () => {
+      const sourceUmgId = q.isTeacher ? q.umgs[0].id : undefined;
+      if (q.isTeacher) {
+        q.umgs[0].nodes.shift();
+        if (q.umgs[0].nodes.length === 0) q.umgs.shift();
+      } else {
+        q.nodes.shift();
+      }
+      mission.push({ label: frontNode, type: q.isBacklog ? 'overdue' : q.type, sourceQueueId: q.id, sourceUmgId });
+      advance();
+    };
+    if (el) { el.classList.add('popping'); el.addEventListener('animationend', doIt, { once: true }); }
+    else doIt();
+  } else {
+    advance();
+  }
+}
+
+function finishAssignmentBurst(burst, overdue = []) {
+  const all = [...burst, ...overdue];
+  assignmentQ.nodes = assignmentQ.nodes.filter(n => !all.find(p => p.id === n.id));
+  // Burst items → mission immediately
+  burst.forEach(n => mission.push({ label: n.id, type: n.due === 'overdue' ? 'overdue' : 'content', due: n.due, sourceQueueId: 'content' }));
+  // Overdue items → backlog queue (Proposal 2 only)
+  if (overdue.length > 0) {
+    const backlog = rrQueues.find(q => q.isBacklog);
+    if (backlog) overdue.forEach(n => backlog.nodes.push(n.id));
+  }
+  phase = 'roundrobin';
+  rrStartCursor = cursor;
+  rrPassCount = 0;
+  render();
+  // Never finish here — always do at least 1 full round-robin pass
+}
+
+function checkTermination() {
+  if (mission.length >= target() && rrPassCount >= 1) finishMission();
+}
+
+function finishMission() {
+  phase = 'gaps';
+  gapScanIndex = 0;
+  matchedGap = null;
+  render();
+  setTimeout(scanNextGap, 700);
+}
+
+function scanNextGap() {
+  if (gapScanIndex >= mission.length) {
+    gapScanIndex = -1;
+    matchedGap = null;
+    phase = 'done';
+    document.getElementById('btn-step').disabled = true;
+    document.getElementById('done-banner').classList.add('visible');
+    render();
+    return;
+  }
+
+  const item = mission[gapScanIndex];
+  // skip gap nodes we already inserted
+  if (item.isGap) { gapScanIndex++; setTimeout(scanNextGap, 250); return; }
+
+  matchedGap = GAP_MAP[item.label] || null;
+  render(); // highlight scanning node + light up matched gap pill
+
+  if (matchedGap) {
+    setTimeout(() => {
+      // insert gap before current item
+      mission.splice(gapScanIndex, 0, { label: matchedGap, type: item.type, isGap: true, isNew: true });
+      matchedGap = null;
+      gapScanIndex += 2; // skip the inserted gap and the matched item
+      render();
+      setTimeout(scanNextGap, 800);
+    }, 900);
+  } else {
+    setTimeout(() => {
+      gapScanIndex++;
+      setTimeout(scanNextGap, 200);
+    }, 500);
+  }
+}
+
+// ── Complete / Return ─────────────────────────────────────────────────────────
+
+function completeItem(idx) {
+  mission[idx].done = true;
+  render();
+}
+
+function returnItem(idx) {
+  const item = mission.splice(idx, 1)[0];
+  if (!item.sourceQueueId) { render(); return; }
+
+  if (item.sourceQueueId === 'content') {
+    assignmentQ.nodes.unshift({ id: item.label, due: item.due || 'future' });
+  } else {
+    const q = rrQueues.find(q => q.id === item.sourceQueueId);
+    if (!q) return;
+    if (q.isTeacher) {
+      const umg = q.umgs.find(u => u.id === item.sourceUmgId);
+      if (umg) umg.nodes.unshift(item.label);
+      else q.umgs.unshift({ id: item.sourceUmgId || 'TU?', due: 'future', nodes: [item.label] });
+    } else {
+      q.nodes.unshift(item.label);
+    }
+  }
+  render();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function render() {
+  // Queues
+  const container = document.getElementById('queues');
+  container.innerHTML = '';
+
+  // Phase 1: Assignments (always first)
+  const p1Label = document.createElement('div');
+  p1Label.className = 'phase-label' + (phase === 'assignments' ? ' active-phase' : '');
+  p1Label.textContent = 'Step 1 — Assignments (always first)';
+  container.appendChild(p1Label);
+
+  const aRow = document.createElement('div');
+  aRow.className = 'queue-row';
+
+  const aLabel = document.createElement('div');
+  aLabel.className = 'queue-label' + (phase === 'assignments' ? ' active' : '');
+  aLabel.textContent = assignmentQ.label;
+
+  const aArrow = document.createElement('div');
+  aArrow.className = 'cursor-arrow' + (phase === 'assignments' ? ' visible' : '');
+  aArrow.textContent = '▶';
+
+  const aNodes = document.createElement('div');
+  aNodes.className = 'nodes';
+  aNodes.dataset.queue = assignmentQ.id;
+
+  if (assignmentQ.nodes.length === 0) {
+    const e = document.createElement('span');
+    e.style.cssText = 'color:#2a2a2a;font-size:0.8rem;';
+    e.textContent = '—';
+    aNodes.appendChild(e);
+  } else {
+    assignmentQ.nodes.forEach((n, ni) => {
+      const el = document.createElement('div');
+      el.className = `node ${n.due === 'overdue' ? 'overdue' : 'content'}${ni === 0 ? ' front' : ''}`;
+      el.dataset.node = n.id;
+      const dot = document.createElement('span');
+      dot.className = 'due-dot ' + (inWindow(n.due) ? 'in-window' : 'out-window');
+      dot.title = n.due.replace('_', ' ');
+      const lbl = document.createElement('span');
+      lbl.textContent = n.id;
+      el.appendChild(dot);
+      el.appendChild(lbl);
+      aNodes.appendChild(el);
+    });
+  }
+
+  aRow.appendChild(aLabel);
+  aRow.appendChild(aArrow);
+  aRow.appendChild(aNodes);
+  container.appendChild(aRow);
+
+  // Phase 2: Round-robin
+  const p2Label = document.createElement('div');
+  p2Label.className = 'phase-label' + (phase === 'roundrobin' ? ' active-phase' : '');
+  p2Label.textContent = 'Step 2 — Round-robin (IA · MAP · Teacher UMG)';
+  container.appendChild(p2Label);
+
+  let lastGroup = null;
+  rrQueues.forEach((q, i) => {
+    if (q.group !== lastGroup) {
+      const gh = document.createElement('div');
+      gh.style.cssText = 'font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#2a2a2a;padding-left:132px;margin-top:8px;margin-bottom:2px;';
+      gh.textContent = q.group;
+      container.appendChild(gh);
+      lastGroup = q.group;
+    }
+
+    const isCursor = phase === 'roundrobin' && i === cursor;
+    const row = document.createElement('div');
+    row.className = 'queue-row';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'queue-label' + (isCursor ? ' active' : '');
+    lbl.textContent = q.label;
+
+    const arr = document.createElement('div');
+    arr.className = 'cursor-arrow' + (isCursor ? ' visible' : '');
+    arr.textContent = '▶';
+
+    const nodes = document.createElement('div');
+    nodes.className = 'nodes';
+    nodes.dataset.queue = q.id;
+
+    const isEmpty = q.isTeacher ? q.umgs.length === 0 : q.nodes.length === 0;
+    if (isEmpty) {
+      const e = document.createElement('span');
+      e.style.cssText = 'color:#2a2a2a;font-size:0.8rem;';
+      e.textContent = '—';
+      nodes.appendChild(e);
+    } else if (q.isTeacher) {
+      // Multiple UMGs in sequence, each a bracket with a due dot
+      let globalIdx = 0;
+      q.umgs.forEach(umg => {
+        const bracket = document.createElement('div');
+        bracket.className = `umg-group ${q.type}`;
+        umg.nodes.forEach(n => {
+          const el = document.createElement('div');
+          el.className = `node ${q.type}${globalIdx === 0 ? ' front' : ''}`;
+          el.dataset.node = n;
+          el.textContent = n;
+          bracket.appendChild(el);
+          globalIdx++;
+        });
+        nodes.appendChild(bracket);
+      });
+    } else if (q.singleUmg) {
+      // Entire strand is one UMG — one bracket around all nodes
+      const bracket = document.createElement('div');
+      bracket.className = `umg-group ${q.type}`;
+      q.nodes.forEach((n, ni) => {
+        const el = document.createElement('div');
+        el.className = `node ${q.type}${ni === 0 ? ' front' : ''}`;
+        el.dataset.node = n;
+        el.textContent = n;
+        bracket.appendChild(el);
+      });
+      nodes.appendChild(bracket);
+    } else {
+      q.nodes.forEach((n, ni) => {
+        const el = document.createElement('div');
+        el.className = `node ${q.type}${ni === 0 ? ' front' : ''}`;
+        el.dataset.node = n;
+        el.textContent = n;
+        nodes.appendChild(el);
+      });
+    }
+
+    row.appendChild(lbl);
+    row.appendChild(arr);
+    row.appendChild(nodes);
+    container.appendChild(row);
+  });
+
+  // Phase 3 — Gap Finder section
+  const p3Label = document.createElement('div');
+  p3Label.className = 'phase-label' + (phase === 'gaps' ? ' active-phase' : '');
+  p3Label.textContent = 'Step 3 — Readiness Check';
+  container.appendChild(p3Label);
+
+  const gapRow = document.createElement('div');
+  gapRow.className = 'gap-finder-row';
+
+  const gapQLabel = document.createElement('div');
+  gapQLabel.className = 'queue-label' + (phase === 'gaps' ? ' active' : '');
+  gapQLabel.textContent = 'Readiness Mission';
+
+  const gapArrow = document.createElement('div');
+  gapArrow.className = 'cursor-arrow' + (phase === 'gaps' ? ' visible' : '');
+  gapArrow.textContent = '▶';
+
+  const gapPool = document.createElement('div');
+  gapPool.className = 'gap-pool';
+
+  const usedGaps = mission.filter(n => n.isGap).map(n => n.label);
+  Object.entries(GAP_MAP).forEach(([nodeLabel, gapLabel]) => {
+    const pill = document.createElement('div');
+    const isUsed    = usedGaps.includes(gapLabel);
+    const isMatched = matchedGap === gapLabel;
+    pill.className = 'gap-pill' + (isMatched ? ' matched' : '') + (isUsed ? ' used' : '');
+    pill.textContent = `${gapLabel} (for ${nodeLabel})`;
+    gapPool.appendChild(pill);
+  });
+
+  gapRow.appendChild(gapQLabel);
+  gapRow.appendChild(gapArrow);
+  gapRow.appendChild(gapPool);
+  container.appendChild(gapRow);
+
+  // Mission
+  const mEl = document.getElementById('mission-nodes');
+  mEl.innerHTML = '';
+  if (mission.length === 0) {
+    mEl.innerHTML = '<span class="mission-empty">empty</span>';
+  } else {
+    mission.forEach((item, i) => {
+      const el = document.createElement('div');
+      const isScanning = phase === 'gaps' && i === gapScanIndex && !item.isGap;
+      const isNew = item.isNew;
+      if (item.isNew) delete item.isNew;
+      el.className = `mission-node ${item.type}${item.isGap ? ' is-gap' : ''}${isScanning ? ' scanning' : ''}${isNew ? ' is-new' : ''}${item.done ? ' done' : ''}`;
+
+      const lbl = document.createElement('span');
+      lbl.textContent = item.label;
+      el.appendChild(lbl);
+
+      // Action buttons — show once mission is fully built (done phase) or after phase 2
+      if (phase === 'done' && !item.isGap) {
+        const actions = document.createElement('div');
+        actions.className = 'item-actions';
+
+        if (!item.done) {
+          const btnC = document.createElement('button');
+          btnC.className = 'btn-complete';
+          btnC.textContent = '✓';
+          btnC.title = 'Mark complete';
+          btnC.onclick = () => completeItem(i);
+          actions.appendChild(btnC);
+
+          const btnR = document.createElement('button');
+          btnR.className = 'btn-return';
+          btnR.textContent = '↩';
+          btnR.title = 'Return to source queue';
+          btnR.onclick = () => returnItem(i);
+          actions.appendChild(btnR);
+        }
+
+        el.appendChild(actions);
+      }
+
+      mEl.appendChild(el);
+    });
+  }
+
+  // Status
+  const passStr = rrPassCount >= 1 ? `pass ${rrPassCount}` : 'pass 0';
+  const phaseLabel = phase === 'assignments' ? 'step 1: assignments'
+                   : phase === 'roundrobin'  ? `step 2: round-robin · ${passStr} · cursor at ${rrQueues[cursor].label}`
+                   : phase === 'gaps'        ? `step 3: readiness check · scanning item ${gapScanIndex + 1}`
+                   : 'complete';
+  document.getElementById('status').textContent =
+    `target ≥ ${target()} · ${mission.length}/${target()} · ${phaseLabel}`;
+}
+
+function setType(t) {
+  missionType = t;
+  document.getElementById('t-daily').classList.toggle('active', t === 'daily');
+  document.getElementById('t-weekly').classList.toggle('active', t === 'weekly');
+  render();
+}
+
+function setProposal(p) {
+  proposal = p;
+  document.getElementById('p-1').classList.toggle('active', p === 1);
+  document.getElementById('p-2').classList.toggle('active', p === 2);
+  init();
+}
+
+function reset() { init(); }
+
+// ── URL param bootstrap ───────────────────────────────────────────────────────
+// Supported params:
+//   ?proposal=1|2        (default: 1)
+//   ?type=daily|weekly   (default: daily)
+//   ?autoplay=true       (auto-step every 900ms until done)
+(function() {
+  const params = new URLSearchParams(window.location.search);
+
+  const p = parseInt(params.get('proposal'));
+  proposal = (p === 2) ? 2 : 1;
+  document.getElementById('p-1').classList.toggle('active', proposal === 1);
+  document.getElementById('p-2').classList.toggle('active', proposal === 2);
+
+  const t = params.get('type');
+  missionType = (t === 'weekly') ? 'weekly' : 'daily';
+  document.getElementById('t-daily').classList.toggle('active', missionType === 'daily');
+  document.getElementById('t-weekly').classList.toggle('active', missionType === 'weekly');
+
+  init();
+
+  if (params.get('autoplay') === 'true') {
+    const iv = setInterval(() => {
+      if (phase === 'done') { clearInterval(iv); return; }
+      step();
+    }, 900);
+  }
+})();
+</script>
+</body>
+</html>
