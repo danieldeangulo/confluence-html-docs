@@ -576,7 +576,8 @@ function finishAssignmentBurst(burst, overdue = []) {
 }
 
 function checkTermination() {
-  if (mission.length >= target() && rrPassCount >= 1) finishMission();
+  const passRequired = missionType === 'weekly';
+  if (mission.length >= target() && (!passRequired || rrPassCount >= 1)) finishMission();
 }
 
 function finishMission() {
